@@ -500,6 +500,24 @@ function invalidateActivityQueries(
     return;
   }
 
+  if (entityType === "brief") {
+    const details = readRecord(payload.details);
+    const linkedIssueId = readString(details?.issueId);
+    queryClient.invalidateQueries({ queryKey: queryKeys.issues.list(companyId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.issues.listMineByMe(companyId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.issues.listTouchedByMe(companyId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.issues.listUnreadTouchedByMe(companyId) });
+    if (linkedIssueId) {
+      const issueRefs = resolveIssueQueryRefs(queryClient, companyId, linkedIssueId, details);
+      for (const ref of issueRefs) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.issues.detail(ref) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.issues.briefs(ref) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.issues.activity(ref) });
+      }
+    }
+    return;
+  }
+
   if (entityType === "agent") {
     queryClient.invalidateQueries({ queryKey: queryKeys.agents.list(companyId) });
     queryClient.invalidateQueries({ queryKey: queryKeys.org(companyId) });

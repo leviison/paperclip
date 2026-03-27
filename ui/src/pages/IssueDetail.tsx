@@ -494,6 +494,21 @@ export function IssueDetail() {
     },
   });
 
+  const activateBrief = useMutation({
+    mutationFn: (briefId: string) => issuesApi.activateBrief(briefId),
+    onSuccess: () => invalidateIssue(),
+  });
+
+  const completeBrief = useMutation({
+    mutationFn: (briefId: string) => issuesApi.completeBrief(briefId),
+    onSuccess: () => invalidateIssue(),
+  });
+
+  const supersedeBrief = useMutation({
+    mutationFn: (briefId: string) => issuesApi.supersedeBrief(briefId),
+    onSuccess: () => invalidateIssue(),
+  });
+
   const markIssueRead = useMutation({
     mutationFn: (id: string) => issuesApi.markRead(id),
     onSuccess: () => {
@@ -992,6 +1007,39 @@ export function IssueDetail() {
                     </div>
                   </div>
                   <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{brief.version}</span>
+                </div>
+                <div className="mt-2 text-sm whitespace-pre-wrap text-muted-foreground">{brief.body}</div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {brief.status === "draft" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={activateBrief.isPending}
+                      onClick={() => activateBrief.mutate(brief.id)}
+                    >
+                      {activateBrief.isPending ? "Activating..." : "Activate"}
+                    </Button>
+                  )}
+                  {brief.status === "active" && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={completeBrief.isPending}
+                        onClick={() => completeBrief.mutate(brief.id)}
+                      >
+                        {completeBrief.isPending ? "Completing..." : "Complete"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={supersedeBrief.isPending}
+                        onClick={() => supersedeBrief.mutate(brief.id)}
+                      >
+                        {supersedeBrief.isPending ? "Superseding..." : "Supersede"}
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
