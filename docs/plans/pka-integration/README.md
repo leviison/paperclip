@@ -26,5 +26,6 @@ Paperclip remains the base platform. These plans are intended to improve operato
 - `2026-03-27-knowledge-browser-spec.md`
 - `2026-03-27-evidence-driven-agent-evolution-spec.md`
 - `2026-03-27-implementation-milestones.md`
+- `2026-03-27-fork-sync-workflow.md`
 
 Additional specs can be added here later as implementation details or milestone plans.
