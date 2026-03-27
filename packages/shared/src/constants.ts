@@ -131,6 +131,18 @@ export type BriefStatus = (typeof BRIEF_STATUSES)[number];
 export const BRIEF_SOURCES = ["manual", "operator_generated", "agent_generated", "system_generated"] as const;
 export type BriefSource = (typeof BRIEF_SOURCES)[number];
 
+export const MEMORY_SUMMARY_ENTITY_TYPES = ["issue", "approval", "agent", "run"] as const;
+export type MemorySummaryEntityType = (typeof MEMORY_SUMMARY_ENTITY_TYPES)[number];
+
+export const MEMORY_SUMMARY_TYPES = ["run_summary", "issue_summary", "approval_summary", "agent_context_summary"] as const;
+export type MemorySummaryType = (typeof MEMORY_SUMMARY_TYPES)[number];
+
+export const MEMORY_SUMMARY_STATUSES = ["active", "superseded", "archived"] as const;
+export type MemorySummaryStatus = (typeof MEMORY_SUMMARY_STATUSES)[number];
+
+export const MEMORY_SUMMARY_ACTOR_TYPES = ["system", "agent", "user"] as const;
+export type MemorySummaryActorType = (typeof MEMORY_SUMMARY_ACTOR_TYPES)[number];
+
 export const GOAL_LEVELS = ["company", "team", "agent", "task"] as const;
 export type GoalLevel = (typeof GOAL_LEVELS)[number];
 

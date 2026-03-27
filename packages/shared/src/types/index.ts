@@ -92,6 +92,7 @@ export type {
   BriefConstraints,
   BriefSummary,
 } from "./brief.js";
+export type { MemorySummary } from "./memory-summary.js";
 export type { Goal } from "./goal.js";
 export type { Approval, ApprovalComment } from "./approval.js";
 export type {

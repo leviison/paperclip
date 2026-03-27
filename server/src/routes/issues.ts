@@ -6,6 +6,7 @@ import {
   addIssueCommentSchema,
   completeBriefSchema,
   createBriefSchema,
+  createMemorySummarySchema,
   createIssueAttachmentMetadataSchema,
   createIssueWorkProductSchema,
   createIssueLabelSchema,
@@ -15,7 +16,9 @@ import {
   issueDocumentKeySchema,
   updateBriefSchema,
   supersedeBriefSchema,
+  supersedeMemorySummarySchema,
   updateIssueWorkProductSchema,
+  updateMemorySummarySchema,
   upsertIssueDocumentSchema,
   updateIssueSchema,
 } from "@paperclipai/shared";
@@ -32,6 +35,7 @@ import {
   issueService,
   documentService,
   logActivity,
+  memorySummaryService,
   projectService,
   routineService,
   workProductService,
@@ -50,6 +54,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
   const svc = issueService(db);
   const access = accessService(db);
   const briefsSvc = briefService(db);
+  const memorySummariesSvc = memorySummaryService(db);
   const heartbeat = heartbeatService(db);
   const agentsSvc = agentService(db);
   const projectsSvc = projectService(db);
@@ -489,6 +494,65 @@ export function issueRoutes(db: Db, storage: StorageService) {
     res.json(briefList);
   });
 
+  router.get("/issues/:id/memory-summaries", async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    const summaries = await memorySummariesSvc.listForEntity(issue.companyId, "issue", issue.id);
+    res.json(summaries);
+  });
+
+  router.post("/issues/:id/memory-summaries", validate(createMemorySummarySchema), async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+
+    if (req.body.entityType !== "issue" || req.body.entityId !== issue.id) {
+      res.status(400).json({ error: "Issue memory summary payload must target this issue" });
+      return;
+    }
+
+    const summary = await memorySummariesSvc.createForIssue({
+      issueId: issue.id,
+      summaryType: req.body.summaryType,
+      title: req.body.title,
+      body: req.body.body,
+      structuredData: req.body.structuredData ?? null,
+      sourceRunId: req.body.sourceRunId ?? null,
+      createdByType: req.body.createdByType,
+      createdById: req.body.createdById,
+      status: req.body.status,
+      supersedesSummaryId: req.body.supersedesSummaryId ?? null,
+    });
+
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId: issue.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: "memory_summary.created",
+      entityType: "memory_summary",
+      entityId: summary.id,
+      details: {
+        issueId: issue.id,
+        summaryType: summary.summaryType,
+        status: summary.status,
+      },
+    });
+
+    res.status(201).json(summary);
+  });
+
   router.post("/issues/:id/briefs", validate(createBriefSchema), async (req, res) => {
     const id = req.params.id as string;
     const issue = await svc.getById(id);
@@ -544,6 +608,17 @@ export function issueRoutes(db: Db, storage: StorageService) {
     res.json(brief);
   });
 
+  router.get("/memory-summaries/:summaryId", async (req, res) => {
+    const summaryId = req.params.summaryId as string;
+    const summary = await memorySummariesSvc.getById(summaryId);
+    if (!summary) {
+      res.status(404).json({ error: "Memory summary not found" });
+      return;
+    }
+    assertCompanyAccess(req, summary.companyId);
+    res.json(summary);
+  });
+
   router.patch("/briefs/:briefId", validate(updateBriefSchema), async (req, res) => {
     const briefId = req.params.briefId as string;
     const existing = await briefsSvc.getById(briefId);
@@ -580,6 +655,43 @@ export function issueRoutes(db: Db, storage: StorageService) {
     });
 
     res.json(brief);
+  });
+
+  router.patch("/memory-summaries/:summaryId", validate(updateMemorySummarySchema), async (req, res) => {
+    const summaryId = req.params.summaryId as string;
+    const existing = await memorySummariesSvc.getById(summaryId);
+    if (!existing) {
+      res.status(404).json({ error: "Memory summary not found" });
+      return;
+    }
+    assertCompanyAccess(req, existing.companyId);
+
+    const summary = await memorySummariesSvc.update(summaryId, {
+      title: req.body.title,
+      body: req.body.body,
+      structuredData: req.body.structuredData,
+      status: req.body.status,
+    });
+
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId: summary.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: "memory_summary.updated",
+      entityType: "memory_summary",
+      entityId: summary.id,
+      details: {
+        targetEntityType: summary.entityType,
+        targetEntityId: summary.entityId,
+        summaryType: summary.summaryType,
+        status: summary.status,
+      },
+    });
+
+    res.json(summary);
   });
 
   router.post("/briefs/:briefId/activate", validate(activateBriefSchema), async (req, res) => {
@@ -641,6 +753,38 @@ export function issueRoutes(db: Db, storage: StorageService) {
     });
 
     res.json(brief);
+  });
+
+  router.post("/memory-summaries/:summaryId/supersede", validate(supersedeMemorySummarySchema), async (req, res) => {
+    const summaryId = req.params.summaryId as string;
+    const existing = await memorySummariesSvc.getById(summaryId);
+    if (!existing) {
+      res.status(404).json({ error: "Memory summary not found" });
+      return;
+    }
+    assertCompanyAccess(req, existing.companyId);
+
+    const summary = await memorySummariesSvc.supersede(summaryId, req.body.replacementSummaryId ?? null);
+
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId: summary.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: "memory_summary.superseded",
+      entityType: "memory_summary",
+      entityId: summary.id,
+      details: {
+        targetEntityType: summary.entityType,
+        targetEntityId: summary.entityId,
+        summaryType: summary.summaryType,
+        status: summary.status,
+      },
+    });
+
+    res.json(summary);
   });
 
   router.post("/briefs/:briefId/complete", validate(completeBriefSchema), async (req, res) => {

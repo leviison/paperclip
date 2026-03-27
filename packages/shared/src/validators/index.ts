@@ -133,6 +133,19 @@ export {
 } from "./brief.js";
 
 export {
+  memorySummaryEntityTypeSchema,
+  memorySummaryTypeSchema,
+  memorySummaryStatusSchema,
+  memorySummaryActorTypeSchema,
+  createMemorySummarySchema,
+  updateMemorySummarySchema,
+  supersedeMemorySummarySchema,
+  type CreateMemorySummary,
+  type UpdateMemorySummary,
+  type SupersedeMemorySummary,
+} from "./memory-summary.js";
+
+export {
   createIssueSchema,
   createIssueLabelSchema,
   updateIssueSchema,
