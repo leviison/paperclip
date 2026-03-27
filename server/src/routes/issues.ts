@@ -397,11 +397,12 @@ export function issueRoutes(db: Db, storage: StorageService) {
         ? req.query.wakeCommentId.trim()
         : null;
 
-    const [{ project, goal }, ancestors, commentCursor, wakeComment] = await Promise.all([
+    const [{ project, goal }, ancestors, commentCursor, wakeComment, activeBrief] = await Promise.all([
       resolveIssueProjectAndGoal(issue),
       svc.getAncestors(issue.id),
       svc.getCommentCursor(issue.id),
       wakeCommentId ? svc.getComment(wakeCommentId) : null,
+      briefsSvc.getActiveForIssue(issue.id),
     ]);
 
     res.json({
@@ -443,6 +444,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
             parentId: goal.parentId,
           }
         : null,
+      activeBrief,
       commentCursor,
       wakeComment:
         wakeComment && wakeComment.issueId === issue.id
