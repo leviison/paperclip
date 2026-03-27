@@ -3,6 +3,7 @@ import type { Goal } from "./goal.js";
 import type { Project, ProjectWorkspace } from "./project.js";
 import type { ExecutionWorkspace, IssueExecutionWorkspaceSettings } from "./workspace-runtime.js";
 import type { IssueWorkProduct } from "./work-product.js";
+import type { Brief, BriefSummary } from "./brief.js";
 
 export interface IssueAncestorProject {
   id: string;
@@ -131,6 +132,8 @@ export interface Issue {
   hiddenAt: Date | null;
   labelIds?: string[];
   labels?: IssueLabel[];
+  activeBrief?: Brief | null;
+  briefSummaries?: BriefSummary[];
   planDocument?: IssueDocument | null;
   documentSummaries?: IssueDocumentSummary[];
   legacyPlanDocument?: LegacyPlanDocument | null;

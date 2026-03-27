@@ -2,7 +2,10 @@ import { Router, type Request, type Response } from "express";
 import multer from "multer";
 import type { Db } from "@paperclipai/db";
 import {
+  activateBriefSchema,
   addIssueCommentSchema,
+  completeBriefSchema,
+  createBriefSchema,
   createIssueAttachmentMetadataSchema,
   createIssueWorkProductSchema,
   createIssueLabelSchema,
@@ -10,6 +13,8 @@ import {
   createIssueSchema,
   linkIssueApprovalSchema,
   issueDocumentKeySchema,
+  updateBriefSchema,
+  supersedeBriefSchema,
   updateIssueWorkProductSchema,
   upsertIssueDocumentSchema,
   updateIssueSchema,
@@ -19,6 +24,7 @@ import { validate } from "../middleware/validate.js";
 import {
   accessService,
   agentService,
+  briefService,
   executionWorkspaceService,
   goalService,
   heartbeatService,
@@ -43,6 +49,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
   const router = Router();
   const svc = issueService(db);
   const access = accessService(db);
+  const briefsSvc = briefService(db);
   const heartbeat = heartbeatService(db);
   const agentsSvc = agentService(db);
   const projectsSvc = projectService(db);
@@ -348,11 +355,12 @@ export function issueRoutes(db: Db, storage: StorageService) {
       return;
     }
     assertCompanyAccess(req, issue.companyId);
-    const [{ project, goal }, ancestors, mentionedProjectIds, documentPayload] = await Promise.all([
+    const [{ project, goal }, ancestors, mentionedProjectIds, documentPayload, activeBrief] = await Promise.all([
       resolveIssueProjectAndGoal(issue),
       svc.getAncestors(issue.id),
       svc.findMentionedProjectIds(issue.id),
       documentsSvc.getIssueDocumentPayload(issue),
+      briefsSvc.getActiveForIssue(issue.id),
     ]);
     const mentionedProjects = mentionedProjectIds.length > 0
       ? await projectsSvc.listByIds(issue.companyId, mentionedProjectIds)
@@ -365,6 +373,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
       ...issue,
       goalId: goal?.id ?? issue.goalId,
       ancestors,
+      activeBrief,
       ...documentPayload,
       project: project ?? null,
       goal: goal ?? null,
@@ -464,6 +473,203 @@ export function issueRoutes(db: Db, storage: StorageService) {
     assertCompanyAccess(req, issue.companyId);
     const docs = await documentsSvc.listIssueDocuments(issue.id);
     res.json(docs);
+  });
+
+  router.get("/issues/:id/briefs", async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    const briefList = await briefsSvc.listForIssue(issue.id);
+    res.json(briefList);
+  });
+
+  router.post("/issues/:id/briefs", validate(createBriefSchema), async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+
+    const actor = getActorInfo(req);
+    const brief = await briefsSvc.create({
+      issueId: issue.id,
+      assignedAgentId: req.body.assignedAgentId ?? null,
+      createdByAgentId: actor.agentId ?? null,
+      createdByUserId: actor.actorType === "user" ? actor.actorId : null,
+      title: req.body.title,
+      body: req.body.body,
+      constraints: req.body.constraints ?? null,
+      expectedOutput: req.body.expectedOutput ?? null,
+      status: req.body.status,
+      source: req.body.source,
+      supersedesBriefId: req.body.supersedesBriefId ?? null,
+    });
+
+    await logActivity(db, {
+      companyId: issue.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: "brief.created",
+      entityType: "brief",
+      entityId: brief.id,
+      details: {
+        issueId: issue.id,
+        assignedAgentId: brief.assignedAgentId,
+        status: brief.status,
+        source: brief.source,
+      },
+    });
+
+    res.status(201).json(brief);
+  });
+
+  router.get("/briefs/:briefId", async (req, res) => {
+    const briefId = req.params.briefId as string;
+    const brief = await briefsSvc.getById(briefId);
+    if (!brief) {
+      res.status(404).json({ error: "Brief not found" });
+      return;
+    }
+    assertCompanyAccess(req, brief.companyId);
+    res.json(brief);
+  });
+
+  router.patch("/briefs/:briefId", validate(updateBriefSchema), async (req, res) => {
+    const briefId = req.params.briefId as string;
+    const existing = await briefsSvc.getById(briefId);
+    if (!existing) {
+      res.status(404).json({ error: "Brief not found" });
+      return;
+    }
+    assertCompanyAccess(req, existing.companyId);
+
+    const actor = getActorInfo(req);
+    const brief = await briefsSvc.update(briefId, {
+      assignedAgentId: req.body.assignedAgentId,
+      title: req.body.title,
+      body: req.body.body,
+      constraints: req.body.constraints,
+      expectedOutput: req.body.expectedOutput,
+      status: req.body.status,
+      source: req.body.source,
+    });
+
+    await logActivity(db, {
+      companyId: brief.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: "brief.updated",
+      entityType: "brief",
+      entityId: brief.id,
+      details: {
+        issueId: brief.issueId,
+        status: brief.status,
+      },
+    });
+
+    res.json(brief);
+  });
+
+  router.post("/briefs/:briefId/activate", validate(activateBriefSchema), async (req, res) => {
+    const briefId = req.params.briefId as string;
+    const existing = await briefsSvc.getById(briefId);
+    if (!existing) {
+      res.status(404).json({ error: "Brief not found" });
+      return;
+    }
+    assertCompanyAccess(req, existing.companyId);
+
+    const actor = getActorInfo(req);
+    const brief = await briefsSvc.activate(briefId);
+
+    await logActivity(db, {
+      companyId: brief.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: "brief.activated",
+      entityType: "brief",
+      entityId: brief.id,
+      details: {
+        issueId: brief.issueId,
+        status: brief.status,
+      },
+    });
+
+    res.json(brief);
+  });
+
+  router.post("/briefs/:briefId/supersede", validate(supersedeBriefSchema), async (req, res) => {
+    const briefId = req.params.briefId as string;
+    const existing = await briefsSvc.getById(briefId);
+    if (!existing) {
+      res.status(404).json({ error: "Brief not found" });
+      return;
+    }
+    assertCompanyAccess(req, existing.companyId);
+
+    const actor = getActorInfo(req);
+    const brief = await briefsSvc.supersede(briefId, req.body.replacementBriefId ?? null);
+
+    await logActivity(db, {
+      companyId: brief.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: "brief.superseded",
+      entityType: "brief",
+      entityId: brief.id,
+      details: {
+        issueId: brief.issueId,
+        supersedesBriefId: brief.supersedesBriefId,
+        status: brief.status,
+      },
+    });
+
+    res.json(brief);
+  });
+
+  router.post("/briefs/:briefId/complete", validate(completeBriefSchema), async (req, res) => {
+    const briefId = req.params.briefId as string;
+    const existing = await briefsSvc.getById(briefId);
+    if (!existing) {
+      res.status(404).json({ error: "Brief not found" });
+      return;
+    }
+    assertCompanyAccess(req, existing.companyId);
+
+    const actor = getActorInfo(req);
+    const brief = await briefsSvc.complete(briefId);
+
+    await logActivity(db, {
+      companyId: brief.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: "brief.completed",
+      entityType: "brief",
+      entityId: brief.id,
+      details: {
+        issueId: brief.issueId,
+        status: brief.status,
+        completedAt: brief.completedAt,
+      },
+    });
+
+    res.json(brief);
   });
 
   router.get("/issues/:id/documents/:key", async (req, res) => {

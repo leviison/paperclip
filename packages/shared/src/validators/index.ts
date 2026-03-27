@@ -117,6 +117,22 @@ export {
 } from "./project.js";
 
 export {
+  briefStatusSchema,
+  briefSourceSchema,
+  briefConstraintsSchema,
+  createBriefSchema,
+  updateBriefSchema,
+  activateBriefSchema,
+  supersedeBriefSchema,
+  completeBriefSchema,
+  type CreateBrief,
+  type UpdateBrief,
+  type ActivateBrief,
+  type SupersedeBrief,
+  type CompleteBrief,
+} from "./brief.js";
+
+export {
   createIssueSchema,
   createIssueLabelSchema,
   updateIssueSchema,

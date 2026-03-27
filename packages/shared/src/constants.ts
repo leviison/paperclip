@@ -125,6 +125,12 @@ export type IssuePriority = (typeof ISSUE_PRIORITIES)[number];
 export const ISSUE_ORIGIN_KINDS = ["manual", "routine_execution"] as const;
 export type IssueOriginKind = (typeof ISSUE_ORIGIN_KINDS)[number];
 
+export const BRIEF_STATUSES = ["draft", "active", "superseded", "completed"] as const;
+export type BriefStatus = (typeof BRIEF_STATUSES)[number];
+
+export const BRIEF_SOURCES = ["manual", "operator_generated", "agent_generated", "system_generated"] as const;
+export type BriefSource = (typeof BRIEF_SOURCES)[number];
+
 export const GOAL_LEVELS = ["company", "team", "agent", "task"] as const;
 export type GoalLevel = (typeof GOAL_LEVELS)[number];
 
