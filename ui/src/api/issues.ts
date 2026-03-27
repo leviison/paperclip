@@ -1,5 +1,6 @@
 import type {
   Approval,
+  Brief,
   DocumentRevision,
   Issue,
   IssueAttachment,
@@ -52,6 +53,14 @@ export const issuesApi = {
     api.post<IssueLabel>(`/companies/${companyId}/labels`, data),
   deleteLabel: (id: string) => api.delete<IssueLabel>(`/labels/${id}`),
   get: (id: string) => api.get<Issue>(`/issues/${id}`),
+  listBriefs: (id: string) => api.get<Brief[]>(`/issues/${id}/briefs`),
+  getBrief: (id: string) => api.get<Brief>(`/briefs/${id}`),
+  createBrief: (id: string, data: Record<string, unknown>) => api.post<Brief>(`/issues/${id}/briefs`, data),
+  updateBrief: (id: string, data: Record<string, unknown>) => api.patch<Brief>(`/briefs/${id}`, data),
+  activateBrief: (id: string) => api.post<Brief>(`/briefs/${id}/activate`, { status: "active" }),
+  supersedeBrief: (id: string, replacementBriefId?: string | null) =>
+    api.post<Brief>(`/briefs/${id}/supersede`, { replacementBriefId: replacementBriefId ?? null }),
+  completeBrief: (id: string) => api.post<Brief>(`/briefs/${id}/complete`, { status: "completed" }),
   markRead: (id: string) => api.post<{ id: string; lastReadAt: Date }>(`/issues/${id}/read`, {}),
   archiveFromInbox: (id: string) =>
     api.post<{ id: string; archivedAt: Date }>(`/issues/${id}/inbox-archive`, {}),

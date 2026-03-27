@@ -38,6 +38,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   Activity as ActivityIcon,
   Check,
@@ -55,7 +58,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { ActivityEvent } from "@paperclipai/shared";
-import type { Agent, IssueAttachment } from "@paperclipai/shared";
+import type { Agent, Brief, IssueAttachment } from "@paperclipai/shared";
 
 type CommentReassignment = {
   assigneeAgentId: string | null;
@@ -213,6 +216,10 @@ export function IssueDetail() {
   });
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [attachmentDragActive, setAttachmentDragActive] = useState(false);
+  const [briefTitle, setBriefTitle] = useState("");
+  const [briefBody, setBriefBody] = useState("");
+  const [briefExpectedOutput, setBriefExpectedOutput] = useState("");
+  const [briefAssignedAgentId, setBriefAssignedAgentId] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const lastMarkedReadIssueIdRef = useRef<string | null>(null);
 
@@ -226,6 +233,12 @@ export function IssueDetail() {
   const { data: comments } = useQuery({
     queryKey: queryKeys.issues.comments(issueId!),
     queryFn: () => issuesApi.listComments(issueId!),
+    enabled: !!issueId,
+  });
+
+  const { data: briefs } = useQuery({
+    queryKey: queryKeys.issues.briefs(issueId!),
+    queryFn: () => issuesApi.listBriefs(issueId!),
     enabled: !!issueId,
   });
 
@@ -453,6 +466,7 @@ export function IssueDetail() {
 
   const invalidateIssue = () => {
     queryClient.invalidateQueries({ queryKey: queryKeys.issues.detail(issueId!) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.issues.briefs(issueId!) });
     queryClient.invalidateQueries({ queryKey: queryKeys.issues.activity(issueId!) });
     queryClient.invalidateQueries({ queryKey: queryKeys.issues.runs(issueId!) });
     queryClient.invalidateQueries({ queryKey: queryKeys.issues.approvals(issueId!) });
@@ -468,6 +482,17 @@ export function IssueDetail() {
       queryClient.invalidateQueries({ queryKey: queryKeys.sidebarBadges(selectedCompanyId) });
     }
   };
+
+  const createBrief = useMutation({
+    mutationFn: (data: Record<string, unknown>) => issuesApi.createBrief(issueId!, data),
+    onSuccess: () => {
+      setBriefTitle("");
+      setBriefBody("");
+      setBriefExpectedOutput("");
+      setBriefAssignedAgentId("");
+      invalidateIssue();
+    },
+  });
 
   const markIssueRead = useMutation({
     mutationFn: (id: string) => issuesApi.markRead(id),
@@ -655,6 +680,9 @@ export function IssueDetail() {
   const isImageAttachment = (attachment: IssueAttachment) => attachment.contentType.startsWith("image/");
   const attachmentList = attachments ?? [];
   const hasAttachments = attachmentList.length > 0;
+  const briefList = briefs ?? [];
+  const activeBrief = issue.activeBrief ?? briefList.find((brief) => brief.status === "active") ?? null;
+  const canCreateBrief = Boolean(session?.user?.id);
   const attachmentUploadButton = (
     <>
       <input
@@ -912,6 +940,138 @@ export function IssueDetail() {
         itemClassName="rounded-lg border border-border p-3"
         missingBehavior="placeholder"
       />
+
+      <div className="space-y-3 rounded-lg border border-border p-4">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-medium text-muted-foreground">Briefs</h3>
+            <p className="text-xs text-muted-foreground">
+              Compact assignment intent for this issue.
+            </p>
+          </div>
+          {activeBrief && (
+            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+              Active
+            </span>
+          )}
+        </div>
+
+        {activeBrief ? (
+          <div className="rounded-md border border-border bg-accent/10 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-sm font-medium truncate">{activeBrief.title}</div>
+                <div className="text-[11px] text-muted-foreground">
+                  {activeBrief.assignedAgentId
+                    ? `Assigned to ${agentMap.get(activeBrief.assignedAgentId)?.name ?? activeBrief.assignedAgentId.slice(0, 8)}`
+                    : "No assignee set"}
+                </div>
+              </div>
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{activeBrief.source}</span>
+            </div>
+            <p className="text-sm whitespace-pre-wrap">{activeBrief.body}</p>
+            {activeBrief.expectedOutput && (
+              <div className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Expected output:</span> {activeBrief.expectedOutput}
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">No active brief yet.</p>
+        )}
+
+        {briefList.length > 0 && (
+          <div className="space-y-2">
+            {briefList.map((brief: Brief) => (
+              <div key={brief.id} className="rounded-md border border-border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">{brief.title}</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {brief.status} · {relativeTime(brief.updatedAt)}
+                    </div>
+                  </div>
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{brief.version}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {canCreateBrief && (
+          <form
+            className="space-y-3 rounded-md border border-dashed border-border p-3"
+            onSubmit={(evt) => {
+              evt.preventDefault();
+              if (!briefTitle.trim() || !briefBody.trim()) return;
+              createBrief.mutate({
+                title: briefTitle.trim(),
+                body: briefBody.trim(),
+                expectedOutput: briefExpectedOutput.trim() || null,
+                assignedAgentId: briefAssignedAgentId || issue.assigneeAgentId || null,
+                status: activeBrief ? "draft" : "active",
+              });
+            }}
+          >
+            <div className="text-xs font-medium text-muted-foreground">Create brief</div>
+            <div className="space-y-1.5">
+              <Label htmlFor="brief-title">Title</Label>
+              <Input
+                id="brief-title"
+                value={briefTitle}
+                onChange={(evt) => setBriefTitle(evt.target.value)}
+                placeholder="Summarize the assignment"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="brief-body">Body</Label>
+              <Textarea
+                id="brief-body"
+                value={briefBody}
+                onChange={(evt) => setBriefBody(evt.target.value)}
+                placeholder="What should be done, why it matters, and any constraints."
+                rows={5}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="brief-expected-output">Expected output</Label>
+              <Input
+                id="brief-expected-output"
+                value={briefExpectedOutput}
+                onChange={(evt) => setBriefExpectedOutput(evt.target.value)}
+                placeholder="Optional expected artifact or outcome"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="brief-assignee">Assignee</Label>
+              <select
+                id="brief-assignee"
+                value={briefAssignedAgentId}
+                onChange={(evt) => setBriefAssignedAgentId(evt.target.value)}
+                className="border-input dark:bg-input/30 h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+              >
+                <option value="">Current issue assignee</option>
+                {(agents ?? [])
+                  .filter((agent) => agent.status !== "terminated")
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((agent) => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] text-muted-foreground">
+                {activeBrief ? "New briefs start as draft while an active brief exists." : "The first brief becomes active immediately."}
+              </p>
+              <Button type="submit" size="sm" disabled={createBrief.isPending || !briefTitle.trim() || !briefBody.trim()}>
+                {createBrief.isPending ? "Saving..." : "Create brief"}
+              </Button>
+            </div>
+          </form>
+        )}
+      </div>
 
       <IssueDocumentsSection
         issue={issue}
