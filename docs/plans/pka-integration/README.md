@@ -22,6 +22,7 @@ Paperclip remains the base platform. These plans are intended to improve operato
 - `2026-03-27-pka-paperclip-integration-roadmap.md`
 - `2026-03-27-briefs-spec.md`
 - `2026-03-27-briefs-code-change-map.md`
+- `2026-03-27-briefs-foundation-context-snapshot.md`
 - `2026-03-27-memory-summaries-spec.md`
 - `2026-03-27-operator-session-workflow-spec.md`
 - `2026-03-27-knowledge-browser-spec.md`
